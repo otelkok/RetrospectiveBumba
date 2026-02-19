@@ -1,0 +1,33 @@
+# T1574.011 — Registry Write Verification Script
+# PrivEscScanner 624 writable key raporladi, gercekten yazilabilir mi dogrula
+# False positive kaynagi: UAC Registry Virtualization veya farkli execution context
+# ---------------------------------------------------------------
+
+# 1. Gercekten yazilabilir SYSTEM servislerini bul
+$writable = @()
+$svcs = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services"
+foreach ($s in $svcs) {
+    try {
+        $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey(
+            "SYSTEM\CurrentControlSet\Services\$($s.PSChildName)", $true)
+        if ($key -ne $null) {
+            $img = $key.GetValue("ImagePath")
+            if ($img) {
+                $obj = $key.GetValue("ObjectName")
+                $writable += [PSCustomObject]@{
+                    Name = $s.PSChildName
+                    Account = $obj
+                    ImagePath = $img
+                }
+            }
+            $key.Close()
+        }
+    } catch {}
+}
+Write-Host "Gercekten yazilabilir servis sayisi: $($writable.Count)"
+$writable | Where-Object { $_.Account -match "SYSTEM|LocalSystem" -or $_.Account -eq $null } |
+    Select-Object -First 20 | Format-Table -AutoSize
+
+# 2. Yazilabilir SYSTEM servislerinden birini sec ve exploit et
+# $target = ($writable | Where-Object { $_.Account -match "SYSTEM|LocalSystem" })[0].Name
+# Asagidaki exploit adimlari icin ServiceRegistryHijack_Exploit.txt dosyasina bak
